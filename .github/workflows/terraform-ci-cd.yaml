@@ -59,7 +59,7 @@ jobs:
         run: |
           jq -r '
           select(.type == "planned_change") |
-          "- \(.change.resource.addr): \(.change.action)"
+          "- Name:\(.change.resource.resource_name) - \(.change.resource.addr): \(.change.action)"
           ' plan.json > summary.txt
 
       - name: Comment PR with Summary
