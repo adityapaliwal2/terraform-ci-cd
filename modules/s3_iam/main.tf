@@ -6,17 +6,6 @@ resource "aws_s3_bucket" "tf_state" {
   bucket = var.tf_state_bucket
 }
 
-resource "aws_dynamodb_table" "tf_lock" {
-  name         = var.tf_lock_table
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "LockID"
-
-  attribute {
-    name = "LockID"
-    type = "S"
-  }
-}
-
 resource "aws_iam_role" "ec2_role" {
   name = "ec2-s3-role"
 
