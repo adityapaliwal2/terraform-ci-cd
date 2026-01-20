@@ -1,0 +1,95 @@
+name: Terraform CI/CD
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    steps:
+      # -------------------------
+      # Checkout Code
+      # -------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -------------------------
+      # Setup Terraform
+      # -------------------------
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.3
+
+      # -------------------------
+      # Configure AWS Credentials
+      # -------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # -------------------------
+      # Terraform Init
+      # -------------------------
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      # ======================================================
+      # PR → Terraform PLAN (JSON stream) + Summary
+      # ======================================================
+      - name: Terraform Plan (JSON)
+        if: github.event_name == 'pull_request'
+        run: terraform plan -json > plan.json
+
+      - name: Generate Plan Summary
+        if: github.event_name == 'pull_request'
+        run: |
+          jq -r '
+          select(.type == "planned_change") |
+          "- \(.change.resource.addr): \(.change.action)"
+          ' plan.json > summary.txt
+
+      - name: Comment PR with Summary
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            let summary = '';
+            try {
+              summary = fs.readFileSync('summary.txt', 'utf8').trim();
+            } catch (e) {
+              summary = '';
+            }
+
+            const body = summary
+              ? `## Terraform Change Summary 🚀\n\n${summary}`
+              : `## Terraform Change Summary 🚀\n\nNo infrastructure changes detected.`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });
+
+      # ======================================================
+      # MERGE → Terraform APPLY
+      # ======================================================
+      - name: Terraform Apply
+        if: github.event_name == 'push'
+        run: terraform apply -auto-approve
